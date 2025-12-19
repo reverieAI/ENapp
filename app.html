@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>English Flashcards Pro</title>
+    <style>
+        :root {
+            --bg: #000000;
+            --card-bg: #111111;
+            --accent: #3b82f6;
+            --success: #22c55e;
+            --text-main: #ffffff;
+            --text-dim: #a1a1aa;
+            --safe-top: env(safe-area-inset-top);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        /* --- CATEGORY NAVIGATION --- */
+        .header-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.9), transparent);
+            padding-top: calc(10px + var(--safe-top));
+            padding-bottom: 15px;
+        }
+
+        .category-wrapper {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            padding: 0 20px;
+            scrollbar-width: none;
+        }
+        .category-wrapper::-webkit-scrollbar { display: none; }
+
+        .cat-item {
+            white-space: nowrap;
+            padding: 8px 18px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid transparent;
+        }
+        .cat-item.active {
+            background: var(--accent);
+            color: white;
+            font-weight: 600;
+            transform: scale(1.05);
+        }
+
+        .progress-line {
+            height: 2px;
+            background: rgba(255,255,255,0.1);
+            margin: 10px 20px 0;
+            border-radius: 1px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+            transition: width 0.4s cubic-bezier(0.1, 0.7, 0.1, 1);
+        }
+
+        /* --- SCROLL FEED --- */
+        #main-feed {
+            height: 100vh;
+            overflow-y: scroll;
+            scroll-snap-type: y mandatory;
+            scrollbar-width: none;
+        }
+        #main-feed::-webkit-scrollbar { display: none; }
+
+        .snap-section {
+            height: 100vh;
+            width: 100%;
+            scroll-snap-align: start;
+            scroll-snap-stop: always;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            position: relative;
+        }
+
+        /* --- FLASHCARD UI --- */
+        .card {
+            width: 100%;
+            max-width: 450px;
+            height: 60vh;
+            perspective: 1200px;
+        }
+
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transform-style: preserve-3d;
+            cursor: pointer;
+        }
+
+        .card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .face {
+            position: absolute;
+            inset: 0;
+            backface-visibility: hidden;
+            background: var(--card-bg);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 32px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+        }
+
+        .face-back {
+            transform: rotateY(180deg);
+            background: #1a1a1a;
+            direction: rtl; /* Translation remains RTL for Persian */
+        }
+
+        .en-text {
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1.3;
+            letter-spacing: -0.02em;
+        }
+
+        .fa-text {
+            font-size: 1.8rem;
+            line-height: 1.6;
+            color: var(--text-main);
+            font-family: "Tahoma", sans-serif;
+        }
+
+        .badge {
+            position: absolute;
+            top: 30px;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--accent);
+            text-transform: uppercase;
+        }
+
+        .badge.expert { color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
+        .badge.master { color: #ec4899; background: rgba(236, 72, 153, 0.1); }
+
+        /* --- SIDEBAR CONTROLS --- */
+        .sidebar {
+            position: absolute;
+            right: 15px;
+            bottom: 12%;
+            display: flex;
+            flex-direction: column;
+            gap: 22px;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .action-btn {
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.08);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .action-btn:active { transform: scale(0.85); }
+        .action-btn.active { background: var(--success); border-color: var(--success); box-shadow: 0 0 15px rgba(34, 197, 94, 0.3); }
+        .action-btn.toggle-on { color: var(--accent); border-color: var(--accent); }
+        
+        .action-btn svg { width: 22px; height: 22px; fill: currentColor; }
+
+        .label {
+            font-size: 0.6rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .tap-instruction {
+            position: absolute;
+            bottom: 40px;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            opacity: 0.6;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.7; }
+        }
+
+        /* --- TUTORIAL --- */
+        #tutorial {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.9);
+            backdrop-filter: blur(10px);
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+            text-align: center;
+        }
+
+        #tutorial h2 { font-size: 2rem; margin-bottom: 15px; }
+        #tutorial p { font-size: 1.1rem; color: var(--text-dim); margin-bottom: 30px; max-width: 280px; line-height: 1.5; }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 16px 40px;
+            border-radius: 30px;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .hidden { display: none !important; }
+
+    </style>
+</head>
+<body>
+
+<div id="tutorial">
+    <h2>Hello! 👋</h2>
+    <p>Swipe up or down to switch sentences.<br>Tap the card to reveal translation.</p>
+    <button class="btn-primary" onclick="closeTutorial()">Let's Start</button>
+</div>
+
+<div class="header-nav">
+    <div class="category-wrapper" id="catBar">
+        <!-- Categories Injected Here -->
+    </div>
+    <div class="progress-line">
+        <div class="progress-fill" id="progressBar"></div>
+    </div>
+</div>
+
+<div id="main-feed">
+    <!-- Cards Injected Here -->
+</div>
+
+<script>
+    const DATABASE = {
+        "image": {
+            label: "Visual Scenes",
+            items: [
+                { en: "In the foreground, a man is writing in a notebook.", fa: "در پیش‌زمینه، مردی در حال نوشتن در یک دفترچه است.", level: "B2" },
+                { en: "The background is slightly blurred to focus on the subject.", fa: "پس‌زمینه کمی تار شده تا روی سوژه تمرکز شود.", level: "C1" },
+                { en: "The sun is shining brightly, casting long shadows.", fa: "خورشید به شدت می‌تابد و سایه‌های بلندی ایجاد می‌کند.", level: "B1" },
+                { en: "A girl is looking out the window with a thoughtful expression.", fa: "دختری با چهره‌ای متفکر در حال تماشای بیرون از پنجره است.", level: "B2" },
+            { en: "In the foreground, a man is writing in a notebook.", fa: "در پیش‌زمینه، مردی در حال نوشتن در یک دفترچه است.", level: "B2" },
+            { en: "The background is slightly blurred to focus on the subject.", fa: "پس‌زمینه کمی تار شده تا روی سوژه تمرکز شود.", level: "C1" },
+            { en: "A girl is looking out the window with a thoughtful expression.", fa: "دختری با چهره‌ای متفکر در حال تماشای بیرون از پنجره است.", level: "B2" },
+            { en: "The sun is shining brightly, casting long shadows.", fa: "خورشید به شدت می‌تابد و سایه‌های بلندی ایجاد می‌کند.", level: "B2" },
+            { en: "A dog is running across the lawn happily.", fa: "سگی با خوشحالی از روی چمن می‌دود.", level: "B2" },
+            { en: "The mountains in the distance are covered with snow.", fa: "کوه‌های دوردست با برف پوشیده شده‌اند.", level: "C1" },
+            { en: "People are walking along the beach, enjoying the sunset.", fa: "مردم در ساحل قدم می‌زنند و از غروب لذت می‌برند.", level: "B2" },
+            { en: "A car is parked under a tree, partially hidden by shadows.", fa: "یک ماشین زیر درخت پارک شده و قسمتی از آن در سایه پنهان است.", level: "C1" },
+            { en: "A child is holding a colorful balloon in the park.", fa: "کودکی در پارک یک بادکنک رنگی در دست دارد.", level: "B2" },
+            { en: "The sky is painted with vibrant colors during sunset.", fa: "آسمان در هنگام غروب با رنگ‌های زنده رنگ‌آمیزی شده است.", level: "C1" },
+            { en: "The café has small tables with people drinking coffee.", fa: "کافه میزهای کوچک دارد و مردم در حال نوشیدن قهوه هستند.", level: "B2" },
+            { en: "A bicycle is leaning against the wall near the entrance.", fa: "یک دوچرخه نزدیک ورودی به دیوار تکیه داده شده است.", level: "B2" },
+            { en: "Raindrops are sliding down the glass window.", fa: "قطرات باران از روی شیشه پنجره سر می‌خورند.", level: "B2" },
+            { en: "A street musician is playing guitar on the corner.", fa: "یک نوازنده خیابانی در گوشه خیابان گیتار می‌زند.", level: "B2" },
+            { en: "The landscape features rolling hills and green valleys.", fa: "منظره دارای تپه‌های موج‌دار و دره‌های سبز است.", level: "C1" },
+            { en: "A woman is reading a book under a tree.", fa: "زنی زیر درخت کتاب می‌خواند.", level: "B2" },
+            { en: "The bridge arches gracefully over the river.", fa: "پل به زیبایی روی رودخانه قوس کشیده است.", level: "C1" },
+            { en: "Children are playing on swings in the playground.", fa: "بچه‌ها روی تاب در زمین بازی بازی می‌کنند.", level: "B2" },
+            { en: "A flock of birds is flying in formation across the sky.", fa: "دسته‌ای از پرندگان به صورت منظم از آسمان عبور می‌کنند.", level: "C1" },
+            { en: "The old building has ornate architectural details.", fa: "ساختمان قدیمی جزئیات معماری زینتی دارد.", level: "C1" },
+            { en: "A couple is walking hand in hand through the park.", fa: "یک زوج دست در دست هم در پارک قدم می‌زنند.", level: "B2" },
+            { en: "The market stalls are filled with fresh produce.", fa: "غرفه‌های بازار پر از محصولات تازه هستند.", level: "B2" },
+            { en: "A cat is perched on the fence, watching passersby.", fa: "گربه‌ای روی حصار نشسته و عابران را تماشا می‌کند.", level: "B2" },
+            { en: "The statue stands prominently in the city square.", fa: "مجسمه به طور برجسته در میدان شهر ایستاده است.", level: "C1" },
+            { en: "A train is pulling into the station platform.", fa: "قطاری به سکوی ایستگاه نزدیک می‌شود.", level: "B2" },
+            { en: "The forest path is covered with fallen autumn leaves.", fa: "مسیر جنگل با برگ‌های پاییزی افتاده پوشیده شده است.", level: "C1" },
+            { en: "A fisherman is casting his line into the lake.", fa: "ماهیگیری خط خود را به درون دریاچه پرتاب می‌کند.", level: "B2" },
+            { en: "The city skyline is illuminated at night.", fa: "افق شهر در شب روشن است.", level: "B2" },
+            { en: "A farmer is plowing the field with a tractor.", fa: "کشاورزی با تراکتور زمین را شخم می‌زند.", level: "B2" },
+            { en: "The waterfall cascades down the rocky cliff.", fa: "آبشار از صخره سنگی به پایین سرازیر می‌شود.", level: "C1" },
+            { en: "People are queuing outside the movie theater.", fa: "مردم بیرون سینما صف کشیده‌اند.", level: "B2" },
+            { en: "A hot air balloon floats peacefully in the sky.", fa: "یک بالن هوای گرم با آرامش در آسمان شناور است.", level: "B2" },
+            { en: "The garden is blooming with colorful spring flowers.", fa: "باغ با گل‌های بهاری رنگارنگ شکوفا شده است.", level: "B2" },
+            { en: "A lighthouse stands on the rocky coastline.", fa: "یک فانوس دریایی در خط ساحلی سنگی ایستاده است.", level: "B2" },
+            { en: "The village is nestled between two mountains.", fa: "روستا بین دو کوه جای گرفته است.", level: "C1" },
+            { en: "A photographer is capturing the scenic landscape.", fa: "عکاسی چشم‌انداز زیبا را ثبت می‌کند.", level: "B2" },
+            { en: "The pond reflects the surrounding trees perfectly.", fa: "حوضچه درختان اطراف را به طور کامل منعکس می‌کند.", level: "C1" },
+            { en: "A deer is grazing peacefully in the meadow.", fa: "آهویی با آرامش در چمنزار چرا می‌کند.", level: "B2" },
+            { en: "The snow-covered peaks glisten in the sunlight.", fa: "قله‌های پوشیده از برف در نور خورشید می‌درخشند.", level: "C1" },
+            { en: "A busy intersection has cars waiting at traffic lights.", fa: "یک تقاطع شلوغ ماشین‌هایی دارد که در چراغ راهنمایی منتظرند.", level: "B2" },
+            { en: "The harbor is filled with fishing boats and yachts.", fa: "بندر پر از قایق‌های ماهیگیری و یاخت است.", level: "B2" },
+            { en: "A windmill is turning slowly in the countryside.", fa: "یک آسیاب بادی به آرامی در حومه شهر می‌چرخد.", level: "B2" },
+            { en: "The desert landscape stretches endlessly to the horizon.", fa: "منظره بیابان بی‌انتها تا افق کشیده شده است.", level: "C1" },
+            { en: "A skateboarder is performing tricks in the park.", fa: "یک اسکیت‌بورد‌باز در پارک حرکات نمایشی انجام می‌دهد.", level: "B2" },
+            { en: "The festival grounds are decorated with colorful banners.", fa: "محوطه جشنواره با بنرهای رنگی تزئین شده است.", level: "B2" },
+            { en: "A moonlit path leads through the quiet forest.", fa: "مسیری که با نور ماه روشن شده، از میان جنگل ساکت عبور می‌کند.", level: "C1" },
+            { en: "The barn is surrounded by farmland and crops.", fa: "انبار با زمین‌های کشاورزی و محصولات احاطه شده است.", level: "B2" },
+            { en: "A crowd gathers to watch the street performance.", fa: "جمعیتی جمع می‌شوند تا نمایش خیابانی را تماشا کنند.", level: "B2" },
+            { en: "The ancient ruins attract many tourists.", fa: "خرابه‌های باستانی گردشگران زیادی را جذب می‌کنند.", level: "B2" },
+            { en: "A narrow alley winds between old buildings.", fa: "یک کوچه باریک بین ساختمان‌های قدیمی پیچ می‌خورد.", level: "C1" },
+            { en: "The storefront displays mannequins wearing fashionable clothes.", fa: "ویترین فروشگاه مانکن‌هایی را نشان می‌دهد که لباس‌های مد روز پوشیده‌اند.", level: "C1" },
+            { en: "A rainbow appears after the rain shower.", fa: "رنگین‌کمانی بعد از بارش باران ظاهر می‌شود.", level: "B2" },
+            { en: "The campfire crackles as people sit around it.", fa: "آتش کمپ صدا می‌کند در حالی که مردم دور آن نشسته‌اند.", level: "B2" },
+            { en: "A castle sits majestically on top of the hill.", fa: "قلعه‌ای با شکوه در بالای تپه قرار دارد.", level: "C1" },
+            { en: "The pier extends far into the calm sea.", fa: "اسکله تا دور در دریای آرام امتداد دارد.", level: "B2" },
+            { en: "A gardener is trimming hedges with precision.", fa: "باغبانی پرچین‌ها را با دقت هرس می‌کند.", level: "C1" },
+            { en: "The town square is bustling with activity.", fa: "میدان شهر پر از فعالیت و جنب و جوش است.", level: "B2" },
+            { en: "A lone tree stands in the middle of the field.", fa: "یک درخت تنها در وسط مزرعه ایستاده است.", level: "B2" },
+            { en: "The observatory dome opens to reveal the telescope.", fa: "گنبد رصدخانه باز می‌شود و تلسکوپ را نشان می‌دهد.", level: "C1" },
+            { en: "A vendor arranges fruits in an appealing display.", fa: "فروشنده میوه‌ها را به صورت جذابی چیده است.", level: "B2" },
+            { en: "The canyon walls tower above the narrow riverbed.", fa: "دیواره‌های دره بر بستر باریک رودخانه بلند شده‌اند.", level: "C1" },
+            { en: "A jogger runs along the lakeside path at dawn.", fa: "دونده‌ای در سپیده‌دم در مسیر کنار دریاچه می‌دود.", level: "B2" },
+            { en: "The greenhouse is filled with exotic tropical plants.", fa: "گلخانه پر از گیاهان گرمسیری عجیب است.", level: "C1" },
+            { en: "A monastery perches on the mountainside.", fa: "صومعه‌ای در دامنه کوه قرار دارد.", level: "C1" },
+            { en: "The boardwalk stretches along the beachfront.", fa: "پیاده‌رو چوبی در امتداد ساحل کشیده شده است.", level: "B2" },
+            { en: "A sculptor is chiseling away at a marble block.", fa: "مجسمه‌سازی یک بلوک مرمر را تراشیده می‌کند.", level: "C1" },
+            { en: "The valley is shrouded in morning mist.", fa: "دره در مه صبحگاهی پوشیده شده است.", level: "C1" },
+            { en: "A parade proceeds down the main street with floats.", fa: "یک رژه با شناورها از خیابان اصلی عبور می‌کند.", level: "B2" },
+            { en: "The vineyard rows extend across the hillside.", fa: "ردیف‌های تاکستان در سراسر دامنه تپه امتداد دارند.", level: "C1" },
+            { en: "A clock tower dominates the historic town center.", fa: "برج ساعت بر مرکز تاریخی شهر مسلط است.", level: "C1" },
+            { en: "The coral reef teems with colorful marine life.", fa: "صخره مرجانی پر از حیات دریایی رنگارنگ است.", level: "C1" },
+            { en: "A blacksmith hammers glowing metal on an anvil.", fa: "آهنگری فلز داغ را روی سندان چکش می‌زند.", level: "C1" },
+            { en: "The ice rink is crowded with skaters of all ages.", fa: "زمین یخ پر از اسکیت‌بازانی از تمام سنین است.", level: "B2" },
+            { en: "A suspension bridge connects the two sides of the gorge.", fa: "یک پل معلق دو طرف تنگه را به هم وصل می‌کند.", level: "C1" },
+            { en: "The orchard is heavy with ripe fruit ready for harvest.", fa: "باغ میوه پر از میوه‌های رسیده آماده برداشت است.", level: "C1" },
+            { en: "A street artist creates a chalk drawing on the pavement.", fa: "یک هنرمند خیابانی نقاشی گچی روی سنگفرش می‌کشد.", level: "B2" },
+{ en: "He has short black hair and brown eyes.", fa: "او موهای کوتاه سیاه و چشم‌های قهوه‌ای دارد.", level: "B2" },
+            { en: "She is tall and slim with long blonde hair.", fa: "او قد بلند و لاغر است و موهای بلند بلوند دارد.", level: "B2" },
+            { en: "The child has curly hair and a cheerful smile.", fa: "کودک موهای فر دارد و لبخندی شاد بر لب دارد.", level: "B2" },
+            { en: "He is wearing glasses and a blue jacket.", fa: "او عینک زده و ژاکت آبی پوشیده است.", level: "B2" },
+            { en: "She has a small nose and dimples when she smiles.", fa: "او بینی کوچکی دارد و هنگام لبخند گودی گونه‌هایش مشخص می‌شود.", level: "B2" },
+            { en: "He has a beard and thick eyebrows.", fa: "او ریش و ابروهای پرپشت دارد.", level: "B2" },
+            { en: "She is wearing earrings and a necklace.", fa: "او گوشواره و گردنبند دارد.", level: "B2" },
+            { en: "The man has broad shoulders and a strong build.", fa: "مرد شانه‌های پهن و اندامی قوی دارد.", level: "C1" },
+            { en: "She has long eyelashes and fair skin.", fa: "او مژه‌های بلند و پوستی روشن دارد.", level: "B2" },
+            { en: "He is bald with a round face.", fa: "او کچل است و چهره‌ای گرد دارد.", level: "B2" },
+            { en: "The woman has straight hair tied in a ponytail.", fa: "زن موهای صاف خود را به صورت دم اسبی بسته است.", level: "B2" },
+            { en: "He has wrinkles on his forehead from frequent frowning.", fa: "او چین و چروک روی پیشانی دارد که از اخم‌های مکرر است.", level: "C1" },
+            { en: "She has piercing blue eyes that stand out.", fa: "او چشم‌های آبی تیزی دارد که برجسته هستند.", level: "C1" },
+            { en: "He has a prominent jawline and high cheekbones.", fa: "او خط فک برجسته و گونه‌های بالایی دارد.", level: "C1" },
+            { en: "She has freckles scattered across her nose and cheeks.", fa: "او کک و مک‌هایی دارد که روی بینی و گونه‌هایش پراکنده است.", level: "B2" },
+            { en: "The teenager has acne on his face.", fa: "نوجوان جوش‌هایی روی صورتش دارد.", level: "B2" },
+            { en: "She has plump lips and a gentle expression.", fa: "او لب‌های پر و چهره‌ای ملایم دارد.", level: "B2" },
+            { en: "He has salt-and-pepper hair showing his age.", fa: "او موهای سیاه و سفید دارد که سنش را نشان می‌دهد.", level: "C1" },
+            { en: "She is petite with delicate features.", fa: "او ریزنقش و دارای ویژگی‌های ظریف است.", level: "C1" },
+            { en: "He has a scar running across his left eyebrow.", fa: "او زخمی دارد که از ابروی چپش عبور می‌کند.", level: "B2" },
+            { en: "She has olive skin and dark hair.", fa: "او پوست زیتونی و موهای تیره دارد.", level: "B2" },
+            { en: "The man has a muscular physique from regular exercise.", fa: "مرد اندامی عضلانی از ورزش منظم دارد.", level: "C1" },
+            { en: "She has silver hair styled in an elegant bun.", fa: "او موهای نقره‌ای دارد که به صورت شینیون شیک آراسته شده است.", level: "C1" },
+            { en: "He has sunken cheeks and looks quite thin.", fa: "او گونه‌های فرورفته دارد و خیلی لاغر به نظر می‌رسد.", level: "C1" },
+            { en: "She has a beauty mark near her upper lip.", fa: "او خالی نزدیک لب بالایی دارد.", level: "B2" },
+            { en: "He has bushy eyebrows that meet in the middle.", fa: "او ابروهای پرپشتی دارد که در وسط به هم می‌رسند.", level: "B2" },
+            { en: "She has a widow's peak in her hairline.", fa: "او نوک موی مثلثی شکل در خط موهایش دارد.", level: "C1" },
+            { en: "The athlete has a toned and fit body.", fa: "ورزشکار بدنی تناسب یافته و آماده دارد.", level: "B2" },
+            { en: "He has a crooked nose from a past injury.", fa: "او بینی کجی از یک آسیب قبلی دارد.", level: "B2" },
+            { en: "She has rosy cheeks and a healthy glow.", fa: "او گونه‌های گلگون و درخشش سالمی دارد.", level: "B2" },
+            { en: "He is clean-shaven with smooth skin.", fa: "او تمیز تراشیده و پوستی صاف دارد.", level: "B2" },
+            { en: "She has wavy auburn hair cascading down her back.", fa: "او موهای قرمز مایل به قهوه‌ای موج‌دار دارد که از پشتش آویزان است.", level: "C1" },
+            { en: "He has tattoos covering both arms.", fa: "او خالکوبی‌هایی دارد که هر دو بازویش را پوشانده است.", level: "B2" },
+            { en: "She has almond-shaped eyes and thick lashes.", fa: "او چشم‌های بادامی و مژه‌های پرپشت دارد.", level: "C1" },
+            { en: "He has a receding hairline at the temples.", fa: "او خط موهای عقب رفته در شقیقه‌ها دارد.", level: "C1" },
+            { en: "She has a heart-shaped face and pointed chin.", fa: "او چهره‌ای قلبی شکل و چانه‌ای نوک‌تیز دارد.", level: "C1" },
+            { en: "The elderly man has age spots on his hands.", fa: "مرد مسن لکه‌های پیری روی دستانش دارد.", level: "B2" },
+            { en: "She has dreadlocks that reach her waist.", fa: "او موهای درهم تنیده‌ای دارد که به کمرش می‌رسد.", level: "C1" },
+            { en: "He has a cleft chin that runs in his family.", fa: "او چانه شکاف‌داری دارد که در خانواده‌اش ارثی است.", level: "C1" },
+            { en: "She has porcelain skin without any blemishes.", fa: "او پوستی چینی بدون هیچ لکه‌ای دارد.", level: "C1" },
+            { en: "He has gray sideburns and a matching mustache.", fa: "او سبیل‌های خاکستری و سبیل همرنگ دارد.", level: "C1" },
+            { en: "She has an hourglass figure and graceful posture.", fa: "او اندامی ساعت شنی و قامتی باوقار دارد.", level: "C1" },
+            { en: "He has deep-set eyes that appear thoughtful.", fa: "او چشم‌های فرورفته دارد که متفکر به نظر می‌رسند.", level: "C1" },
+            { en: "She has a pixie haircut that suits her face.", fa: "او موهای کوتاه پسرانه دارد که به صورتش می‌آید.", level: "B2" },
+            { en: "He has calloused hands from manual labor.", fa: "او دستانی پینه‌دار از کار بدنی دارد.", level: "C1" },
+            { en: "She has a radiant smile that lights up her face.", fa: "او لبخندی درخشان دارد که صورتش را روشن می‌کند.", level: "B2" }
+            ]
+        },
+        "bank": {
+            label: "Banking & Finance",
+            items: [
+                { en: "I'd like to open a savings account.", fa: "مایلم یک حساب پس‌انداز باز کنم.", level: "A2" },
+                { en: "What is the current interest rate for fixed deposits?", fa: "نرخ سود فعلی برای سپرده‌های ثابت چقدر است؟", level: "B2" },
+                { en: "I need to authorize a wire transfer to this account.", fa: "باید یک حواله بانکی به این حساب را تایید کنم.", level: "C1" },
+                { en: "My credit card has been declined twice.", fa: "کارت اعتباری من دو بار رد شده است.", level: "B1" }
+            ]
+        },
+        "idioms": {
+    label: "Idioms & Slang",
+    items: [
+        { en: "It's high time we addressed the elephant in the room.", fa: "دیگه وقتشه که راجع به مشکل اصلی صحبت کنیم.", level: "C1" },
+        { en: "Don't beat around the bush; get to the point.", fa: "حاشیه نرو؛ برو سر اصل مطلب.", level: "B2" },
+        { en: "I'm feeling a bit under the weather today.", fa: "امروز یکم حالم خوش نیست.", level: "B2" },
+        { en: "Break a leg at your presentation tomorrow!", fa: "موفق باشی تو ارائه‌ت فردا!", level: "B2" },
+        { en: "It's raining cats and dogs outside.", fa: "بیرون داره سگ و گربه بارون میاد / خیلی شدید داره بارون میاد.", level: "B1" },
+        { en: "Let's call it a day and continue tomorrow.", fa: "بیا برای امروز تمومش کنیم و فردا ادامه بدیم.", level: "B2" },
+        { en: "He spilled the beans about the surprise party.", fa: "اون راز مهمونی سورپرایز رو لو داد.", level: "B2" },
+        { en: "This project costs an arm and a leg.", fa: "این پروژه خیلی گرونه / پول زیادی می‌خواد.", level: "B2" },
+        { en: "Don't cry over spilled milk; move on.", fa: "گذشته‌ها گذشته؛ به آینده فکر کن.", level: "B2" },
+        { en: "She's got a chip on her shoulder lately.", fa: "اون این روزا یه جوری کینه‌توزه / عصبیه.", level: "C1" },
+        { en: "He's barking up the wrong tree with that theory.", fa: "اون با این تئوری داره به درخت اشتباهی نگاه می‌کنه / اشتباه می‌کنه.", level: "C1" },
+        { en: "Let's not put all our eggs in one basket.", fa: "بیا همه چیزو رو یه برگ شرط نبندیم.", level: "B2" },
+        { en: "He threw in the towel after three attempts.", fa: "اون بعد از سه تا تلاش تسلیم شد / دست کشید.", level: "C1" },
+        { en: "It's a piece of cake for someone like you.", fa: "برای کسی مثل تو خیلی راحته / مثل آب خوردنه.", level: "B1" },
+        { en: "We need to get the ball rolling on this project.", fa: "باید این پروژه رو شروع کنیم / به راه بندازیم.", level: "B2" },
+        { en: "She hit the nail on the head with that comment.", fa: "اون با اون نظرش دقیقا به خورد زد / درست حدس زد.", level: "C1" },
+        { en: "I'm all ears; tell me what happened.", fa: "گوشم با توئه؛ بگو چی شد.", level: "B2" },
+        { en: "Let's touch base next week about the proposal.", fa: "بیا هفته دیگه درباره پیشنهاد صحبت کنیم.", level: "C1" },
+        { en: "He's pulling your leg; don't take it seriously.", fa: "اون داره سرت رو شیره می‌ماله؛ جدی نگیر.", level: "B2" },
+        { en: "That's the last straw; I'm done with this.", fa: "این آخرین قطره بود؛ دیگه تمومش می‌کنم.", level: "C1" },
+        { en: "She's burning the midnight oil to finish her thesis.", fa: "اون داره شب‌ها بیدار می‌مونه تا پایان‌نامه‌شو تموم کنه.", level: "C1" },
+        { en: "Don't put the cart before the horse.", fa: "کارها رو به ترتیب انجام بده / از جلو نرو.", level: "B2" },
+        { en: "It's not rocket science; anyone can do it.", fa: "این کار سخت نیست؛ هرکس می‌تونه انجامش بده.", level: "B2" },
+        { en: "He's got bigger fish to fry right now.", fa: "اون الان کارهای مهم‌تری داره / سرش شلوغه.", level: "C1" },
+        { en: "Let's cut to the chase and discuss the main issue.", fa: "بیا بریم سر اصل مطلب و درباره مسئله اصلی صحبت کنیم.", level: "C1" },
+        { en: "She's sitting on the fence about the job offer.", fa: "اون هنوز درباره پیشنهاد کاری مردده / تصمیم نگرفته.", level: "C1" },
+        { en: "That ship has sailed; we missed the opportunity.", fa: "اون فرصت از دست رفته؛ ما فرصتو از دست دادیم.", level: "C1" },
+        { en: "He's the black sheep of the family.", fa: "اون گوسفند سیاه خانواده‌ست / بدنام خانواده‌ست.", level: "B2" },
+        { en: "We're in the same boat here.", fa: "ما همه تو یه قایق هستیم / موقعیت یکسانی داریم.", level: "B2" },
+        { en: "It's time to face the music and accept responsibility.", fa: "وقتشه که به خطاهامون اعتراف کنیم و مسئولیت قبول کنیم.", level: "C1" },
+        { en: "Let's keep this under wraps for now.", fa: "بیا این موضوع رو فعلا محرمانه نگه داریم.", level: "C1" },
+        { en: "He's bending over backwards to help us.", fa: "اون داره خودشو می‌کشه که به ما کمک کنه.", level: "C1" },
+        { en: "Don't count your chickens before they hatch.", fa: "از الان خوشحال نشو / زود خوش نباش.", level: "B2" },
+        { en: "She really knows the ropes in this industry.", fa: "اون واقعا تو این صنعت خبره / خیلی می‌دونه.", level: "C1" },
+        { en: "Let's not jump the gun on this decision.", fa: "بیا تو این تصمیم عجله نکنیم / زودتر از موقع اقدام نکنیم.", level: "C1" },
+        { en: "He's got his head in the clouds today.", fa: "اون امروز حواسش پرته / تو فکره.", level: "B2" },
+        { en: "That's just the tip of the iceberg.", fa: "این فقط سر کوه یخه / قسمت کوچیکی از ماجراست.", level: "C1" },
+        { en: "Let's play it by ear and see how things go.", fa: "بیا بدون برنامه قبلی پیش بریم و ببینیم چی می‌شه.", level: "C1" },
+        { en: "She's got a lot on her plate this month.", fa: "اون این ماه کلی کار داره / خیلی سرش شلوغه.", level: "B2" },
+        { en: "He's walking on thin ice with that attitude.", fa: "اون با این رفتار داره خودشو به خطر می‌ندازه.", level: "C1" },
+        { en: "Let's give them the benefit of the doubt.", fa: "بیا بهشون فرصت بدیم / حسن نیت داشته باشیم.", level: "C1" },
+        { en: "It's time to bite the bullet and make a decision.", fa: "وقتشه که جرات کنیم و تصمیم بگیریم.", level: "C1" },
+        { en: "He's always passing the buck to someone else.", fa: "اون همیشه مسئولیتو به گردن دیگران می‌ندازه.", level: "C1" },
+        { en: "Let's not split hairs over minor details.", fa: "بیا سر جزئیات کوچیک دعوا نکنیم.", level: "C1" },
+        { en: "She's burning bridges with that behavior.", fa: "اون با این رفتار داره راه برگشتشو می‌بنده.", level: "C1" },
+        { en: "That's water under the bridge now.", fa: "اون موضوع الان گذشته‌ست / مهم نیست.", level: "B2" },
+        { en: "He's got cold feet about the wedding.", fa: "اون نسبت به عروسی ترسیده / دلش می‌خواد انصراف بده.", level: "C1" },
+        { en: "Let's not open that can of worms right now.", fa: "بیا الان وارد اون موضوع پیچیده نشیم.", level: "C1" },
+        { en: "She's got an ace up her sleeve for this negotiation.", fa: "اون برای این مذاکره یه برگ برنده داره.", level: "C1" },
+        { en: "He's burning the candle at both ends lately.", fa: "اون این روزا خیلی بیش از حد کار می‌کنه / خودشو می‌کشه.", level: "C1" },
+        { en: "Let's not throw the baby out with the bathwater.", fa: "بیا چیزهای خوب رو با بدها دور نندازیم.", level: "C1" },
+        { en: "That's just adding fuel to the fire.", fa: "این فقط داره وضعیتو بدتر می‌کنه.", level: "B2" },
+        { en: "She's really stepped up to the plate this year.", fa: "اون امسال واقعا خودشو نشون داده / مسئولیت گرفته.", level: "C1" }
+    ]
+},
+        "daily": {
+            label: "Daily Life",
+            items: [
+                { en: "I am sitting at my desk.", fa: "پشت میزم نشستم.", level: "A1" },
+                { en: "I am slowly looking around the room.", fa: "آروم دارم دور و بر اتاق رو نگاه می‌کنم.", level: "A2" },
+                { en: "I can see condensation on the window due to the rain.", fa: "به دلیل باران، بخار روی پنجره را می‌بینم.", level: "B2" },
+		        { en: "I am sitting at my desk, observing my surroundings.", fa: "پشت میزم نشسته‌ام و محیط اطرافم را مشاهده می‌کنم.", level: "B2" },
+            { en: "The lamp on the desk is turned on, casting a warm light.", fa: "چراغ روی میز روشن است و نور گرمی می‌تاباند.", level: "B2" },
+            { en: "Outside the window, I can see trees swaying in the wind.", fa: "خارج از پنجره، درختان را می‌بینم که در باد تکان می‌خورند.", level: "B2" },
+            { en: "A glass of water is on the table, half full.", fa: "یک لیوان آب روی میز است که نصفه پر است.", level: "B2" },
+            { en: "I notice the floor is slightly dusty today.", fa: "متوجه می‌شوم که امروز کف کمی گرد و خاک دارد.", level: "B2" },
+            { en: "The clock on the wall shows quarter past three.", fa: "ساعت روی دیوار ساعت سه و ربع را نشان می‌دهد.", level: "B2" },
+            { en: "A faint smell of coffee fills the room.", fa: "بوی کم‌رنگ قهوه فضا را پر کرده است.", level: "B2" },
+            { en: "I see a small spider crawling near the window.", fa: "یک عنکبوت کوچک را نزدیک پنجره می‌بینم که می‌خزد.", level: "B2" },
+            { en: "The curtains are swaying slightly in the breeze.", fa: "پرده‌ها کمی در نسیم تکان می‌خورند.", level: "B2" },
+            { en: "I am adjusting my chair to sit more comfortably.", fa: "صندلی‌ام را تنظیم می‌کنم تا راحت‌تر بنشینم.", level: "B2" },
+            { en: "The desk drawer is open, revealing scattered papers.", fa: "کشوی میز باز است و کاغذهای پراکنده را نشان می‌دهد.", level: "B2" },
+            { en: "I notice a sticky note attached to the monitor.", fa: "یک یادداشت چسبانده شده روی مانیتور را مشاهده می‌کنم.", level: "B2" },
+            { en: "The morning sun streams through the blinds.", fa: "خورشید صبحگاهی از میان پرده‌های کرکره‌ای عبور می‌کند.", level: "B2" },
+            { en: "I hear the sound of birds chirping outside.", fa: "صدای جیک جیک پرندگان را بیرون می‌شنوم.", level: "B2" },
+            { en: "My phone is charging on the bedside table.", fa: "گوشی‌ام روی میز کنار تخت در حال شارژ است.", level: "B2" },
+            { en: "The air conditioner is humming quietly in the corner.", fa: "کولر در گوشه به آرامی صدا می‌کند.", level: "B2" },
+            { en: "I need to water the plants on the windowsill.", fa: "باید گیاهان روی طاقچه پنجره را آبیاری کنم.", level: "B2" },
+            { en: "The doorbell rings unexpectedly.", fa: "زنگ در به طور غیرمنتظره‌ای به صدا درمی‌آید.", level: "B2" },
+            { en: "I can smell something burning in the kitchen.", fa: "بوی سوختگی چیزی را از آشپزخانه حس می‌کنم.", level: "B2" },
+            { en: "The radiator is making a strange noise.", fa: "شوفاژ صدای عجیبی تولید می‌کند.", level: "B2" },
+            { en: "I fold the laundry and put it away in the closet.", fa: "لباس‌ها را تا می‌کنم و در کمد می‌گذارم.", level: "B2" },
+            { en: "The kettle is boiling on the stove.", fa: "کتری روی اجاق گاز در حال جوشیدن است.", level: "B2" },
+            { en: "I sweep the kitchen floor after cooking.", fa: "بعد از آشپزی، کف آشپزخانه را جارو می‌کنم.", level: "B2" },
+            { en: "The refrigerator door is slightly ajar.", fa: "در یخچال کمی باز است.", level: "B2" },
+            { en: "I arrange the cushions neatly on the sofa.", fa: "کوسن‌ها را منظم روی کاناپه می‌چینم.", level: "B2" },
+            { en: "The garbage bin needs to be emptied today.", fa: "امروز باید سطل زباله را خالی کنم.", level: "B2" },
+            { en: "I adjust the thermostat to make the room warmer.", fa: "ترموستات را تنظیم می‌کنم تا اتاق گرم‌تر شود.", level: "B2" },
+            { en: "The mailman just delivered a package to my door.", fa: "پستچی الان یک بسته را جلوی در من تحویل داد.", level: "B2" },
+            { en: "I wipe down the countertops after preparing breakfast.", fa: "بعد از آماده کردن صبحانه، سطح کانترها را تمیز می‌کنم.", level: "B2" },
+            { en: "The washing machine has just finished its cycle.", fa: "ماشین لباسشویی تازه کارش را تمام کرده است.", level: "B2" },
+            { en: "I draw the curtains to block out the bright sunlight.", fa: "پرده‌ها را می‌کشم تا نور شدید خورشید را مسدود کنم.", level: "B2" },
+            { en: "The candle on the table flickers gently.", fa: "شمع روی میز به آرامی می‌لرزد.", level: "B2" },
+            { en: "I organize my bookshelf by arranging books by size.", fa: "قفسه کتابم را با چیدن کتاب‌ها بر اساس اندازه، منظم می‌کنم.", level: "C1" },
+            { en: "The neighbor's dog is barking loudly next door.", fa: "سگ همسایه در خانه بغلی با صدای بلند پارس می‌کند.", level: "B2" },
+            { en: "I replace the burnt-out light bulb in the hallway.", fa: "لامپ سوخته راهرو را تعویض می‌کنم.", level: "B2" },
+            { en: "The heating system kicks in as the temperature drops.", fa: "با کاهش دما، سیستم گرمایش به کار می‌افتد.", level: "C1" },
+            { en: "I notice a crack in the ceiling that wasn't there before.", fa: "ترکی در سقف می‌بینم که قبلاً آنجا نبود.", level: "B2" },
+            { en: "The smoke alarm beeps, indicating a low battery.", fa: "دتکتور دود بوق می‌زند که نشان می‌دهد باتری کم است.", level: "B2" },
+            { en: "I rearrange the furniture to create more space.", fa: "مبلمان را جابه‌جا می‌کنم تا فضای بیشتری ایجاد شود.", level: "B2" },
+            { en: "The carpet needs vacuuming as it looks quite dirty.", fa: "فرش نیاز به جارو برقی دارد چون خیلی کثیف به نظر می‌رسد.", level: "B2" },
+            { en: "I hang my coat on the hook behind the door.", fa: "کتم را روی قلاب پشت در آویزان می‌کنم.", level: "B2" },
+            { en: "The bathroom mirror is fogged up from the hot shower.", fa: "آینه حمام از دوش آب گرم بخار گرفته است.", level: "B2" },
+            { en: "I set the alarm clock for six in the morning.", fa: "ساعت زنگ‌دار را برای ساعت شش صبح تنظیم می‌کنم.", level: "B2" },
+            { en: "The window frame is painted white and needs touch-ups.", fa: "چهارچوب پنجره سفید رنگ شده و نیاز به رنگ‌آمیزی دارد.", level: "C1" },
+            { en: "I sort through old magazines and decide what to keep.", fa: "مجله‌های قدیمی را مرور می‌کنم و تصمیم می‌گیرم کدام را نگه دارم.", level: "B2" },
+            { en: "The floorboards creak when I walk across the room.", fa: "وقتی از اتاق رد می‌شوم، تخته‌های کف صدا می‌کنند.", level: "B2" },
+            { en: "I dust the shelves with a soft cloth.", fa: "قفسه‌ها را با یک پارچه نرم گردگیری می‌کنم.", level: "B2" },
+            { en: "The plants in the living room need more sunlight.", fa: "گیاهان اتاق نشیمن به نور خورشید بیشتری نیاز دارند.", level: "B2" },
+            { en: "I notice cobwebs forming in the corner of the ceiling.", fa: "تارهای عنکبوت را در گوشه سقف می‌بینم که در حال تشکیل هستند.", level: "B2" },
+            { en: "The door hinge squeaks and needs oiling.", fa: "لولای در جیر جیر می‌کند و نیاز به روغن‌کاری دارد.", level: "B2" },
+            { en: "I place fresh flowers in a vase on the dining table.", fa: "گل‌های تازه را در گلدانی روی میز ناهارخوری می‌گذارم.", level: "B2" },
+            { en: "The television remote control is missing again.", fa: "کنترل تلویزیون دوباره گم شده است.", level: "B2" },
+            { en: "I wipe the dust off the picture frames on the wall.", fa: "گرد و غبار را از قاب عکس‌های روی دیوار پاک می‌کنم.", level: "B2" },
+            { en: "The bathroom drain is clogged and needs cleaning.", fa: "فاضلاب حمام گرفته و نیاز به تمیز کردن دارد.", level: "B2" },
+            { en: "I refill the soap dispenser in the kitchen.", fa: "مخزن مایع ظرفشویی را در آشپزخانه پر می‌کنم.", level: "B2" },
+            { en: "The windows are covered with condensation on cold mornings.", fa: "در صبح‌های سرد، پنجره‌ها با رطوبت پوشیده می‌شوند.", level: "C1" },
+            { en: "I replace the old towels with fresh ones in the bathroom.", fa: "حوله‌های قدیمی را با حوله‌های تازه در حمام عوض می‌کنم.", level: "B2" },
+            { en: "The hallway light flickers intermittently.", fa: "چراغ راهرو به طور متناوب چشمک می‌زند.", level: "C1" },
+            { en: "I tidy up the living room before guests arrive.", fa: "قبل از آمدن مهمان‌ها، اتاق نشیمن را مرتب می‌کنم.", level: "B2" },
+            { en: "The fireplace crackles as the wood burns slowly.", fa: "شومینه صدا می‌کند در حالی که هیزم به آرامی می‌سوزد.", level: "B2" },
+            { en: "I check the weather forecast before planning my day.", fa: "قبل از برنامه‌ریزی روزم، پیش‌بینی آب و هوا را بررسی می‌کنم.", level: "B2" },
+            { en: "The keys are hanging on the key rack by the entrance.", fa: "کلیدها روی جاکلیدی کنار ورودی آویزان هستند.", level: "B2" },
+            { en: "I set the table for dinner with plates and cutlery.", fa: "میز را برای شام با بشقاب و قاشق و چنگال چیدم.", level: "B2" },
+            { en: "The oven timer beeps to signal the food is ready.", fa: "تایمر فر بوق می‌زند تا نشان دهد غذا آماده است.", level: "B2" },
+            { en: "I close all the windows before leaving the house.", fa: "قبل از خروج از خانه، تمام پنجره‌ها را می‌بندم.", level: "B2" },
+            { en: "The bathroom scale shows I've gained a few pounds.", fa: "ترازوی حمام نشان می‌دهد که چند پوند اضافه وزن گرفته‌ام.", level: "B2" },
+            { en: "I plug in my laptop to charge overnight.", fa: "لپ‌تاپم را برای شارژ شبانه به برق وصل می‌کنم.", level: "B2" },
+            { en: "The attic is full of boxes that need sorting.", fa: "زیرشیروانی پر از جعبه‌هایی است که نیاز به مرتب کردن دارند.", level: "B2" },
+            { en: "I open the blinds to let in the morning light.", fa: "کرکره‌ها را باز می‌کنم تا نور صبح وارد شود.", level: "B2" },
+            { en: "The cat is sleeping peacefully on the windowsill.", fa: "گربه با آرامش روی طاقچه پنجره خوابیده است.", level: "B2" },
+            { en: "I prepare a grocery list for my weekly shopping.", fa: "یک لیست خرید برای خریدهای هفتگی‌ام آماده می‌کنم.", level: "B2" },
+            { en: "The basement feels damp and needs better ventilation.", fa: "زیرزمین مرطوب به نظر می‌رسد و به تهویه بهتری نیاز دارد.", level: "C1" },
+            { en: "I lock the front door before going to bed.", fa: "قبل از خواب، در ورودی را قفل می‌کنم.", level: "B2" },
+            { en: "The dish rack is full of clean, drying dishes.", fa: "آبچکان پر از ظرف‌های تمیز و در حال خشک شدن است.", level: "B2" },
+            { en: "I notice the paint is peeling off the bathroom wall.", fa: "متوجه می‌شوم که رنگ دیوار حمام در حال کنده شدن است.", level: "B2" },
+            { en: "The garden hose is coiled neatly by the back door.", fa: "شیلنگ باغچه به صورت منظم کنار در پشتی پیچیده شده است.", level: "B2" },
+            { en: "I prepare my clothes for tomorrow before sleeping.", fa: "قبل از خواب، لباس‌هایم را برای فردا آماده می‌کنم.", level: "B2" },
+            { en: "The living room feels cozy with the new rug.", fa: "اتاق نشیمن با فرش جدید دنج به نظر می‌رسد.", level: "B2" },
+            { en: "I turn off all the lights to save electricity.", fa: "همه چراغ‌ها را خاموش می‌کنم تا برق صرفه‌جویی کنم.", level: "B2" },
+{ en: "Students are walking in the hallway, chatting quietly.", fa: "دانشجویان در راهرو قدم می‌زنند و آرام گفتگو می‌کنند.", level: "B2" },
+            { en: "The classroom has rows of desks facing the whiteboard.", fa: "کلاس دارای ردیف‌های میز است که به تخته سفید نگاه می‌کنند.", level: "B2" },
+            { en: "A teacher is explaining the concept on the projector screen.", fa: "معلم مفهوم را روی صفحه پروژکتور توضیح می‌دهد.", level: "C1" },
+            { en: "Some students are taking notes diligently.", fa: "برخی از دانشجویان با دقت یادداشت‌برداری می‌کنند.", level: "B2" },
+            { en: "The library is quiet, with students reading and studying.", fa: "کتابخانه ساکت است و دانشجویان مشغول خواندن و مطالعه هستند.", level: "B2" },
+            { en: "I see a student raising their hand to ask a question.", fa: "یک دانشجو دستش را بلند کرده تا سوالی بپرسد.", level: "B2" },
+            { en: "The office has a notice board filled with announcements.", fa: "اداره یک تابلوی اعلانات دارد که پر از اطلاعیه‌ها است.", level: "B2" },
+            { en: "The lecturer is walking around, engaging with the students.", fa: "مدرس قدم می‌زند و با دانشجویان تعامل می‌کند.", level: "C1" },
+            { en: "I notice a stack of graded exams on the desk.", fa: "یک دسته امتحانات تصحیح شده روی میز دیده می‌شود.", level: "B2" },
+            { en: "The computer lab has several PCs running different programs.", fa: "لابراتوار کامپیوتر چندین رایانه دارد که برنامه‌های مختلفی اجرا می‌کنند.", level: "B2" },
+            { en: "Students are forming groups for a collaborative project.", fa: "دانشجویان گروه‌هایی برای یک پروژه گروهی تشکیل می‌دهند.", level: "C1" },
+            { en: "The classroom projector is showing a detailed diagram.", fa: "پروژکتور کلاس یک نمودار دقیق را نمایش می‌دهد.", level: "C1" },
+            { en: "The professor is distributing handouts for today's lecture.", fa: "استاد جزوات امروز را بین دانشجویان توزیع می‌کند.", level: "B2" },
+            { en: "Students are queuing at the cafeteria during lunch break.", fa: "دانشجویان در وقت ناهار در کافه‌تریا صف کشیده‌اند.", level: "B2" },
+            { en: "The dean is addressing the faculty in the conference room.", fa: "رئیس دانشکده در اتاق کنفرانس به هیئت علمی سخنرانی می‌کند.", level: "C1" },
+            { en: "I attend a workshop on academic writing skills.", fa: "در یک کارگاه آموزشی مهارت‌های نوشتار آکادمیک شرکت می‌کنم.", level: "C1" },
+            { en: "The laboratory is equipped with modern scientific instruments.", fa: "آزمایشگاه به ابزارهای علمی مدرن مجهز است.", level: "C1" },
+            { en: "Students are presenting their research findings to the class.", fa: "دانشجویان یافته‌های تحقیقی خود را به کلاس ارائه می‌دهند.", level: "C1" },
+            { en: "The lecture hall can accommodate up to 200 students.", fa: "سالن سخنرانی می‌تواند تا ۲۰۰ دانشجو را جای دهد.", level: "B2" },
+            { en: "I submit my assignment before the deadline.", fa: "تکلیفم را قبل از مهلت تحویل می‌دهم.", level: "B2" },
+            { en: "The tutorial session helps clarify difficult concepts.", fa: "جلسه آموزشی به روشن شدن مفاهیم دشوار کمک می‌کند.", level: "C1" },
+            { en: "Students are discussing the upcoming midterm exam.", fa: "دانشجویان در مورد امتحان میان‌ترم پیش رو بحث می‌کنند.", level: "B2" },
+            { en: "The teaching assistant is helping with the lab experiment.", fa: "دستیار آموزشی در آزمایش آزمایشگاهی کمک می‌کند.", level: "B2" },
+            { en: "I register for elective courses for next semester.", fa: "برای ترم بعد در دروس اختیاری ثبت‌نام می‌کنم.", level: "B2" },
+            { en: "The campus bookstore sells textbooks and supplies.", fa: "کتاب‌فروشی دانشگاه کتاب‌های درسی و لوازم می‌فروشد.", level: "B2" },
+            { en: "Students are checking their grades online.", fa: "دانشجویان نمرات خود را آنلاین بررسی می‌کنند.", level: "B2" },
+            { en: "The seminar focuses on contemporary issues in economics.", fa: "سمینار بر مسائل معاصر در اقتصاد تمرکز دارد.", level: "C1" },
+            { en: "I attend office hours to discuss my thesis progress.", fa: "در ساعات حضور استاد شرکت می‌کنم تا پیشرفت پایان‌نامه‌ام را بحث کنم.", level: "C1" },
+            { en: "The student union organizes social events on campus.", fa: "انجمن دانشجویی رویدادهای اجتماعی در دانشگاه برگزار می‌کند.", level: "B2" },
+            { en: "Study groups meet regularly in the library.", fa: "گروه‌های مطالعاتی به طور منظم در کتابخانه جلسه دارند.", level: "B2" },
+            { en: "The administrative office handles enrollment procedures.", fa: "اداره اداری روندهای ثبت‌نام را انجام می‌دهد.", level: "B2" },
+            { en: "Students are preparing presentations using PowerPoint.", fa: "دانشجویان با استفاده از پاورپوینت ارائه آماده می‌کنند.", level: "B2" },
+            { en: "The professor assigns readings for the next class.", fa: "استاد خواندنی‌هایی برای کلاس بعدی تعیین می‌کند.", level: "B2" },
+            { en: "I participate in a debate about climate change policy.", fa: "در مناظره‌ای درباره سیاست تغییرات آب و هوایی شرکت می‌کنم.", level: "C1" },
+            { en: "The academic advisor helps me plan my course schedule.", fa: "مشاور تحصیلی به من کمک می‌کند برنامه درسی‌ام را تنظیم کنم.", level: "B2" },
+            { en: "Students are cramming for their final exams.", fa: "دانشجویان برای امتحانات پایانی خود درس می‌خوانند.", level: "B2" },
+            { en: "The research paper requires extensive bibliography.", fa: "مقاله پژوهشی نیاز به کتابشناسی گسترده دارد.", level: "C1" },
+            { en: "I attend a guest lecture by a renowned scholar.", fa: "در سخنرانی مهمانی یک دانشمند مشهور شرکت می‌کنم.", level: "C1" },
+            { en: "The science department is conducting cutting-edge research.", fa: "بخش علوم در حال انجام تحقیقات پیشرفته است.", level: "C1" },
+            { en: "Students are working on their thesis proposals.", fa: "دانشجویان روی پیشنهاد پایان‌نامه خود کار می‌کنند.", level: "C1" },
+            { en: "The examination board reviews all submitted papers.", fa: "هیئت امتحانات تمام مقالات ارسال شده را بررسی می‌کند.", level: "C1" },
+            { en: "I apply for a scholarship to fund my studies.", fa: "برای بورسیه درخواست می‌دهم تا تحصیلاتم را تامین کنم.", level: "B2" },
+            { en: "The orientation program welcomes new students.", fa: "برنامه آشنایی دانشجویان جدید را خوشامد می‌گوید.", level: "B2" },
+            { en: "Students are conducting surveys for their research projects.", fa: "دانشجویان برای پروژه‌های تحقیقی خود نظرسنجی انجام می‌دهند.", level: "C1" },
+            { en: "The curriculum includes both theoretical and practical courses.", fa: "برنامه درسی شامل دروس نظری و عملی است.", level: "C1" },
+            { en: "I attend a symposium on artificial intelligence.", fa: "در یک همایش درباره هوش مصنوعی شرکت می‌کنم.", level: "C1" },
+            { en: "Students are peer-reviewing each other's essays.", fa: "دانشجویان مقالات یکدیگر را بررسی همتا می‌کنند.", level: "C1" },
+            { en: "The graduation ceremony takes place in June.", fa: "مراسم فارغ‌التحصیلی در ماه ژوئن برگزار می‌شود.", level: "B2" },
+            { en: "I download lecture notes from the online portal.", fa: "جزوات درس را از پورتال آنلاین دانلود می‌کنم.", level: "B2" },
+            { en: "The professor provides feedback on draft assignments.", fa: "استاد بازخورد درباره پیش‌نویس تکالیف ارائه می‌دهد.", level: "C1" },
+            { en: "Students are attending a career fair on campus.", fa: "دانشجویان در نمایشگاه شغلی دانشگاه شرکت می‌کنند.", level: "B2" },
+            { en: "The academic year is divided into two semesters.", fa: "سال تحصیلی به دو ترم تقسیم می‌شود.", level: "B2" },
+            { en: "I collaborate with classmates on a group assignment.", fa: "با هم‌کلاسی‌هایم روی یک تکلیف گروهی همکاری می‌کنم.", level: "B2" },
+            { en: "The lecture covers fundamental principles of physics.", fa: "سخنرانی اصول اساسی فیزیک را پوشش می‌دهد.", level: "C1" },
+            { en: "Students are submitting their course evaluations online.", fa: "دانشجویان ارزیابی‌های دوره را آنلاین ارسال می‌کنند.", level: "B2" },
+            { en: "The department head announces changes to the curriculum.", fa: "رئیس بخش تغییرات برنامه درسی را اعلام می‌کند.", level: "C1" },
+            { en: "I attend weekly meetings with my research supervisor.", fa: "در جلسات هفتگی با سرپرست تحقیقم شرکت می‌کنم.", level: "C1" },
+            { en: "The lab report must include methodology and results.", fa: "گزارش آزمایشگاه باید شامل روش‌شناسی و نتایج باشد.", level: "C1" },
+            { en: "Students are enrolling in summer courses.", fa: "دانشجویان در دوره‌های تابستانی ثبت‌نام می‌کنند.", level: "B2" },
+            { en: "The campus wifi network is accessible everywhere.", fa: "شبکه وای‌فای دانشگاه در همه جا در دسترس است.", level: "B2" },
+            { en: "I request an extension for my assignment deadline.", fa: "برای مهلت تکلیفم درخواست تمدید می‌کنم.", level: "B2" },
+            { en: "The conference room is booked for student meetings.", fa: "اتاق کنفرانس برای جلسات دانشجویی رزرو شده است.", level: "B2" },
+            { en: "Students are analyzing data using statistical software.", fa: "دانشجویان با استفاده از نرم‌افزار آماری، داده‌ها را تحلیل می‌کنند.", level: "C1" },
+            { en: "The plagiarism policy is strictly enforced.", fa: "سیاست سرقت ادبی به شدت اجرا می‌شود.", level: "C1" },
+            { en: "I participate in an internship program during summer.", fa: "در طول تابستان در برنامه کارآموزی شرکت می‌کنم.", level: "B2" },
+            { en: "The lecture notes are comprehensive and well-organized.", fa: "جزوات درس جامع و سازمان‌یافته هستند.", level: "C1" },
+            { en: "Students are rehearsing for the graduation ceremony.", fa: "دانشجویان برای مراسم فارغ‌التحصیلی تمرین می‌کنند.", level: "B2" },
+            { en: "The examination period lasts for two weeks.", fa: "دوره امتحانات دو هفته طول می‌کشد.", level: "B2" },
+            { en: "I consult reference books in the library.", fa: "کتاب‌های مرجع را در کتابخانه مشورت می‌کنم.", level: "B2" },
+            { en: "The academic calendar outlines important dates.", fa: "تقویم تحصیلی تاریخ‌های مهم را مشخص می‌کند.", level: "B2" },
+            { en: "Students are preparing for oral presentations.", fa: "دانشجویان برای ارائه‌های شفاهی آماده می‌شوند.", level: "B2" },
+            { en: "The professor encourages critical thinking in discussions.", fa: "استاد تفکر انتقادی را در بحث‌ها تشویق می‌کند.", level: "C1" },
+            { en: "I take advantage of free tutoring services.", fa: "از خدمات رایگان تدریس خصوصی استفاده می‌کنم.", level: "B2" },
+            { en: "The department organizes field trips for students.", fa: "بخش سفرهای میدانی برای دانشجویان سازماندهی می‌کند.", level: "B2" },
+            { en: "Students are defending their thesis before the committee.", fa: "دانشجویان پایان‌نامه خود را در مقابل کمیته دفاع می‌کنند.", level: "C1" },
+            { en: "The university offers distance learning programs.", fa: "دانشگاه برنامه‌های آموزش از راه دور ارائه می‌دهد.", level: "B2" },
+            { en: "I review previous exam papers to prepare.", fa: "برگه‌های امتحانی قبلی را برای آماده‌سازی مرور می‌کنم.", level: "B2" },
+            { en: "The transcript shows all completed courses and grades.", fa: "ریز نمرات تمام دروس گذرانده شده و نمرات را نشان می‌دهد.", level: "B2" }
+            ]
+        }
+    };
+
+    let currentCat = "image";
+    let knownList = JSON.parse(localStorage.getItem('known_sentences_pro') || '[]');
+    let autoPlay = localStorage.getItem('auto_play') === 'true';
+
+    const feed = document.getElementById('main-feed');
+    const catBar = document.getElementById('catBar');
+    const progressBar = document.getElementById('progressBar');
+
+    function init() {
+        renderCategories();
+        renderCards();
+        if(localStorage.getItem('tutorial_done_pro')) closeTutorial();
+
+        let lastIndex = -1;
+        feed.addEventListener('scroll', () => {
+            const index = Math.round(feed.scrollTop / window.innerHeight);
+            const total = DATABASE[currentCat].items.length;
+            progressBar.style.width = `${((index + 1) / total) * 100}%`;
+            
+            // Auto-play feature when landing on a new card
+            if (index !== lastIndex && autoPlay) {
+                const text = DATABASE[currentCat].items[index].en;
+                playVoice(text);
+                lastIndex = index;
+            }
+        });
+    }
+
+    function renderCategories() {
+        catBar.innerHTML = Object.keys(DATABASE).map(key => `
+            <div class="cat-item ${key === currentCat ? 'active' : ''}" onclick="switchCategory('${key}')">
+                ${DATABASE[key].label}
+            </div>
+        `).join('');
+    }
+
+    function switchCategory(key) {
+        currentCat = key;
+        renderCategories();
+        renderCards();
+        feed.scrollTop = 0;
+        progressBar.style.width = '0%';
+    }
+
+    function getLevelClass(lvl) {
+        if(lvl.startsWith('C')) return 'master';
+        if(lvl.startsWith('B')) return 'expert';
+        return '';
+    }
+
+    function renderCards() {
+        const data = DATABASE[currentCat].items;
+        feed.innerHTML = data.map((item, idx) => {
+            const isKnown = knownList.includes(item.en);
+            return `
+            <div class="snap-section">
+                <div class="card" onclick="this.classList.toggle('flipped')">
+                    <div class="card-inner">
+                        <div class="face">
+                            <span class="badge ${getLevelClass(item.level)}">${item.level}</span>
+                            <div class="en-text">${item.en}</div>
+                        </div>
+                        <div class="face face-back">
+                            <div class="fa-text">${item.fa}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar">
+                    <div class="control-group">
+                        <button class="action-btn ${autoPlay ? 'toggle-on' : ''}" id="autoplay-btn" onclick="event.stopPropagation(); toggleAutoPlay(this)">
+                            <svg viewBox="0 0 24 24"><path d="M10 16.5l6-4.5-6-4.5v9zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
+                        </button>
+                        <div class="label">Auto</div>
+                    </div>
+
+                    <div class="control-group">
+                        <button class="action-btn" onclick="event.stopPropagation(); playVoice('${item.en.replace(/'/g, "\\'")}')">
+                            <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+                        </button>
+                        <div class="label">Listen</div>
+                    </div>
+
+                    <div class="control-group">
+                        <button class="action-btn known-trigger ${isKnown ? 'active' : ''}" onclick="event.stopPropagation(); toggleKnown('${item.en.replace(/'/g, "\\'")}', this)">
+                            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                        </button>
+                        <div class="label">Known</div>
+                    </div>
+                </div>
+
+                <div class="tap-instruction">Tap card for meaning</div>
+            </div>
+        `}).join('');
+    }
+
+    function playVoice(text) {
+        window.speechSynthesis.cancel();
+        const msg = new SpeechSynthesisUtterance(text);
+        msg.lang = 'en-US';
+        msg.rate = 0.9;
+        window.speechSynthesis.speak(msg);
+    }
+
+    function toggleAutoPlay(btn) {
+        autoPlay = !autoPlay;
+        localStorage.setItem('auto_play', autoPlay);
+        btn.classList.toggle('toggle-on');
+    }
+
+    function toggleKnown(en, btn) {
+        if (knownList.includes(en)) {
+            knownList = knownList.filter(i => i !== en);
+            btn.classList.remove('active');
+        } else {
+            knownList.push(en);
+            btn.classList.add('active');
+        }
+        localStorage.setItem('known_sentences_pro', JSON.stringify(knownList));
+    }
+
+    function closeTutorial() {
+        document.getElementById('tutorial').classList.add('hidden');
+        localStorage.setItem('tutorial_done_pro', 'true');
+    }
+
+    window.onload = init;
+</script>
+
+</body>
+</html>
